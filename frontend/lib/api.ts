@@ -67,6 +67,94 @@ export async function previewChunks(
   return res.json();
 }
 
+export interface ChunkMeta {
+  faiss_index: number;
+  chunk_index: number;
+  source_file: string;
+  text: string;
+  char_start: number;
+  char_end: number;
+  score: number;
+  rerank_score: number | null;
+}
+
+/**
+ * Stream a RAG query via SSE from POST /api/v1/query/stream.
+ * Returns a cancel function — call it to abort the request.
+ *
+ * Event sequence from backend:
+ *   event: context  data: ChunkMeta[]   ← retrieved chunks (before any tokens)
+ *   data: {token}                        ← repeated N times
+ *   event: done     data: [DONE]
+ */
+export function streamQuery(
+  query: string,
+  topK: number,
+  rerank: boolean,
+  model: string,
+  onContext: (chunks: ChunkMeta[]) => void,
+  onToken: (token: string) => void,
+  onDone: () => void,
+  onError?: (msg: string) => void,
+): () => void {
+  let cancelled = false;
+
+  (async () => {
+    let res: Response;
+    try {
+      res = await fetch(`${BASE}/api/v1/query/stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query, top_k: topK, rerank, model }),
+      });
+    } catch (e) {
+      onError?.(e instanceof Error ? e.message : "Network error");
+      return;
+    }
+
+    if (!res.ok || !res.body) {
+      onError?.(`Server error ${res.status}`);
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let currentEvent = "message";
+
+    while (!cancelled) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop()!; // keep incomplete last line
+
+      for (const line of lines) {
+        if (line.startsWith("event:")) {
+          currentEvent = line.slice(6).trim();
+        } else if (line.startsWith("data:")) {
+          const data = line.slice(5).trim();
+          if (currentEvent === "context") {
+            onContext(JSON.parse(data));
+          } else if (currentEvent === "done") {
+            onDone();
+            return;
+          } else if (currentEvent === "error") {
+            onError?.(data);
+            return;
+          } else if (data && data !== "[DONE]") {
+            onToken(data);
+          }
+          currentEvent = "message"; // reset after each data line
+        }
+      }
+    }
+  })();
+
+  return () => { cancelled = true; };
+}
+
 export async function embedDocument(
   filename: string,
   text: string,
