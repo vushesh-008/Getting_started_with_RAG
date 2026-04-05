@@ -1,4 +1,4 @@
-# Python
+# ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *.pyo
@@ -7,12 +7,16 @@ venv/
 env/
 uv.lock
 
-# Data (FAISS index + SQLite DB — never commit model data)
+# ── Data (never commit model artefacts or local DBs) ─────────────────────────
 backend/data/
 
-# Frontend
-frontend/node_modules/
-frontend/.next/
+# ── Node.js / Next.js ─────────────────────────────────────────────────────────
+node_modules/
+.next/
+.env
+.env.local
+.env*.local
 
-# OS
+# ── OS ────────────────────────────────────────────────────────────────────────
 .DS_Store
+Thumbs.db
