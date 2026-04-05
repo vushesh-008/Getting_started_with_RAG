@@ -1,0 +1,19 @@
+Retrieval-Augmented Generation (RAG) is a technique that enhances large language models by giving them access to external knowledge at inference time.
+
+Instead of relying solely on knowledge baked into model weights during training, RAG retrieves relevant documents from a knowledge base and injects them into the prompt as context.
+
+This approach solves two major problems with standard LLMs: knowledge cutoffs and hallucinations. Because the model is grounded in retrieved facts, it is less likely to fabricate answers.
+
+The RAG pipeline has two main phases. The first is the indexing phase, where documents are split into chunks, embedded into vectors, and stored in a vector database.
+
+The second is the query phase. When a user submits a question, the query is embedded using the same model. The vector database is searched for the most similar chunk vectors.
+
+The top-k retrieved chunks are assembled into a context window. This context, combined with the original question, is sent to the language model as a single prompt.
+
+The language model reads the context and generates a response that is grounded in the retrieved information rather than relying purely on parametric memory.
+
+Chunking strategy has a significant impact on retrieval quality. If chunks are too large, they contain too much noise. If they are too small, they lose surrounding context needed to answer the question.
+
+A common default is 512 characters with a 64-character overlap. The overlap ensures that sentences split across chunk boundaries are still represented in at least one chunk.
+
+Vector embeddings are dense numerical representations of text. Semantically similar sentences produce vectors that are close together in high-dimensional space, which is what makes similarity search possible.
