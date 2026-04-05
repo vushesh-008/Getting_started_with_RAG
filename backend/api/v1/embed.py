@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from db.database import get_connection
 from services.chunking import chunk_text
-from services.embedding import EmbedResult, embed_and_store
+from services.embedding import EmbedResult, clear_all, embed_and_store
 
 router = APIRouter()
 
@@ -30,7 +30,11 @@ class EmbedResponse(BaseModel):
 
 @router.post("", response_model=EmbedResponse)
 def embed_file(req: EmbedRequest) -> EmbedResponse:
-    """Chunk the provided text, embed it, and persist to FAISS + SQLite."""
+    """Chunk the provided text, embed it, and persist to FAISS + SQLite.
+
+    Clears the existing index before writing so every batch run starts fresh.
+    """
+    clear_all()
     chunks = chunk_text(req.text, chunk_size=req.chunk_size, chunk_overlap=req.chunk_overlap)
 
     result: EmbedResult = embed_and_store(chunks, source_file=req.filename)

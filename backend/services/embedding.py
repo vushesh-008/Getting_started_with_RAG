@@ -57,6 +57,21 @@ def _save_index(index: faiss.IndexFlatIP) -> None:
     faiss.write_index(index, str(INDEX_PATH))
 
 
+def clear_all() -> None:
+    """Wipe the FAISS index file and all SQLite chunk/document rows.
+
+    Called before every batch embed so re-runs start from a clean slate.
+    """
+    if INDEX_PATH.exists():
+        INDEX_PATH.unlink()
+
+    from db.database import get_connection
+    with get_connection() as conn:
+        conn.execute("DELETE FROM chunks")
+        conn.execute("DELETE FROM documents")
+        conn.commit()
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
