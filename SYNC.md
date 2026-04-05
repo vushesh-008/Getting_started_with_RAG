@@ -19,7 +19,7 @@ Update this after every session.
 
 ---
 
-## Phase 1 — COMPLETE ✅
+## Phase 1 — COMPLETE ✅ (+ re-ranking)
 
 - [x] Backend project structure + uv setup (Python 3.12)
 - [x] `services/chunking.py` — Recursive Character Text Splitter
@@ -33,8 +33,12 @@ Update this after every session.
 - [x] `api/v1/query.py` — `/api/v1/query` full RAG pipeline
 - [x] `main.py` — FastAPI app, all routers wired
 - [x] Tested end-to-end with sample.txt + phi3:mini
+- [x] Optional cross-encoder re-ranking (ms-marco-MiniLM-L-6-v2, rerank=True flag)
 
 ---
+
+## Known Issues / Tech Debt
+- [ ] PDF full-text extraction: frontend currently uses `file.text()` (breaks on binary PDFs). Fix: use `extractedText` from `/api/v1/ingest` response body (backend already handles PDF via PyMuPDF), then fetch full text via a new `/api/v1/ingest/text` endpoint or return full text in the ingest response.
 
 ## Next Up (Phase 2)
 
