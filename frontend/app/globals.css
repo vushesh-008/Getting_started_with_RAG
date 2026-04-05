@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+:root {
+  --bg-base: #0B0E14;
+  --border-glass: rgba(255, 255, 255, 0.1);
+  --accent-cyan: #00E5FF;
+  --accent-magenta: #FF00FF;
+  --text-primary: #E8EAF0;
+  --text-muted: rgba(255, 255, 255, 0.45);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: "Inter", "Geist Sans", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Glassmorphism card utility */
+.glass {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-glass);
+  backdrop-filter: blur(12px);
+  border-radius: 12px;
+}
