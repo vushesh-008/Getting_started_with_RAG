@@ -1,18 +1,19 @@
-"""Retrieval service — semantic search + Ollama LLM streaming.
+"""Retrieval service — semantic search + optional re-ranking + Ollama LLM streaming.
 
 Flow:
   1. Embed the query with the same model used at index time.
-  2. Search FAISS for the top-k most similar vectors.
+  2. Search FAISS for the top-k most similar vectors (×3 candidates if re-ranking).
   3. Fetch the corresponding chunk texts from SQLite.
-  4. Build a RAG prompt (system + context + user question).
-  5. Stream the Ollama response token-by-token.
+  4. Optionally re-rank with a cross-encoder and trim back to top-k.
+  5. Build a RAG prompt (system + context + user question).
+  6. Stream the Ollama response token-by-token.
 
-See docs/decisions/llm_serving.md for full rationale.
+See docs/decisions/llm_serving.md and docs/decisions/reranking.md for rationale.
 """
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Generator
 
 import faiss
@@ -23,6 +24,7 @@ from services.embedding import INDEX_PATH, embed_query
 
 OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
 DEFAULT_MODEL = "phi3:mini"
+RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
 SYSTEM_PROMPT = (
     "You are a helpful assistant. Answer the user's question using ONLY the information "
@@ -43,15 +45,38 @@ class RetrievedChunk:
     text: str
     char_start: int
     char_end: int
-    score: float          # cosine similarity (higher = more relevant)
+    score: float                        # cosine similarity from FAISS
+    rerank_score: float | None = field(default=None)  # cross-encoder score (if re-ranked)
+
+
+# ---------------------------------------------------------------------------
+# Lazy-loaded cross-encoder
+# ---------------------------------------------------------------------------
+
+_reranker = None
+
+
+def _get_reranker():
+    global _reranker
+    if _reranker is None:
+        from sentence_transformers import CrossEncoder
+        _reranker = CrossEncoder(RERANK_MODEL)
+    return _reranker
 
 
 # ---------------------------------------------------------------------------
 # Step 1+2 — embed query and search FAISS
 # ---------------------------------------------------------------------------
 
-def retrieve(query: str, top_k: int = 5) -> list[RetrievedChunk]:
-    """Return the top-k most semantically similar chunks for *query*."""
+def retrieve(query: str, top_k: int = 5, rerank: bool = False) -> list[RetrievedChunk]:
+    """Return the top-k most relevant chunks for *query*.
+
+    Args:
+        query:   User question string.
+        top_k:   Number of chunks to return.
+        rerank:  If True, retrieve top_k×3 candidates then re-rank with a
+                 cross-encoder before trimming to top_k.
+    """
     if not INDEX_PATH.exists():
         raise RuntimeError("No FAISS index found. Embed at least one document first.")
 
@@ -59,9 +84,11 @@ def retrieve(query: str, top_k: int = 5) -> list[RetrievedChunk]:
     if index.ntotal == 0:
         raise RuntimeError("FAISS index is empty. Embed at least one document first.")
 
-    top_k = min(top_k, index.ntotal)
-    query_vec = embed_query(query)                   # shape: (1, 384)
-    scores, indices = index.search(query_vec, top_k) # scores shape: (1, k)
+    # Fetch more candidates when re-ranking so the cross-encoder has more to work with
+    fetch_k = min(top_k * 3 if rerank else top_k, index.ntotal)
+
+    query_vec = embed_query(query)
+    scores, indices = index.search(query_vec, fetch_k)
 
     faiss_indices = indices[0].tolist()
     similarity_scores = scores[0].tolist()
@@ -78,7 +105,6 @@ def retrieve(query: str, top_k: int = 5) -> list[RetrievedChunk]:
             faiss_indices,
         ).fetchall()
 
-    # SQLite may return rows in any order — re-sort by FAISS rank
     row_by_faiss = {row["faiss_index"]: row for row in rows}
 
     chunks: list[RetrievedChunk] = []
@@ -96,11 +122,28 @@ def retrieve(query: str, top_k: int = 5) -> list[RetrievedChunk]:
             score=round(score, 4),
         ))
 
-    return chunks
+    if not rerank:
+        return chunks
+
+    # ── Step 3 (optional): cross-encoder re-ranking ──────────────────────────
+    return _rerank(query, chunks, top_k)
+
+
+def _rerank(query: str, chunks: list[RetrievedChunk], top_k: int) -> list[RetrievedChunk]:
+    """Score each (query, chunk) pair with a cross-encoder and return top_k."""
+    reranker = _get_reranker()
+    pairs = [(query, c.text) for c in chunks]
+    raw_scores: list[float] = reranker.predict(pairs).tolist()
+
+    for chunk, rs in zip(chunks, raw_scores):
+        chunk.rerank_score = round(rs, 4)
+
+    reranked = sorted(chunks, key=lambda c: c.rerank_score, reverse=True)  # type: ignore[arg-type]
+    return reranked[:top_k]
 
 
 # ---------------------------------------------------------------------------
-# Step 3+4+5 — build prompt and stream Ollama response
+# Step 4+5 — build prompt and stream Ollama response
 # ---------------------------------------------------------------------------
 
 def _build_context(chunks: list[RetrievedChunk]) -> str:

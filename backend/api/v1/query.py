@@ -1,9 +1,6 @@
-"""POST /api/v1/query — full RAG query: retrieve → stream LLM answer.
+"""POST /api/v1/query — full RAG query: retrieve → (optional re-rank) → stream LLM answer."""
+import json
 
-Returns:
-  - The retrieved chunks (with scores) as JSON metadata in the response headers
-  - The LLM answer as a streaming text/event-stream body
-"""
 import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -14,10 +11,15 @@ from services.retrieval import RetrievedChunk, retrieve, stream_answer
 router = APIRouter()
 
 
+# ---------------------------------------------------------------------------
+# Schemas
+# ---------------------------------------------------------------------------
+
 class QueryRequest(BaseModel):
     query: str = Field(..., min_length=1)
     top_k: int = Field(5, gt=0, le=20)
     model: str = Field("phi3:mini")
+    rerank: bool = Field(False, description="Re-rank candidates with a cross-encoder before answering")
 
 
 class ChunkMeta(BaseModel):
@@ -28,43 +30,49 @@ class ChunkMeta(BaseModel):
     char_start: int
     char_end: int
     score: float
+    rerank_score: float | None = None
 
 
 class QueryMetaResponse(BaseModel):
-    """Returned when stream=False — useful for testing without SSE."""
     query: str
+    reranked: bool
     chunks: list[ChunkMeta]
     answer: str
 
 
-# ── streaming endpoint (default) ─────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _chunk_meta(c: RetrievedChunk) -> ChunkMeta:
+    return ChunkMeta(
+        faiss_index=c.faiss_index,
+        chunk_index=c.chunk_index,
+        source_file=c.source_file,
+        text=c.text,
+        char_start=c.char_start,
+        char_end=c.char_end,
+        score=c.score,
+        rerank_score=c.rerank_score,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Streaming endpoint (for the frontend)
+# ---------------------------------------------------------------------------
 
 @router.post("/stream")
 def query_stream(req: QueryRequest) -> StreamingResponse:
-    """Retrieve top-k chunks and stream the LLM answer as Server-Sent Events."""
+    """Retrieve chunks and stream the LLM answer as Server-Sent Events."""
     try:
-        chunks: list[RetrievedChunk] = retrieve(req.query, top_k=req.top_k)
+        chunks: list[RetrievedChunk] = retrieve(req.query, top_k=req.top_k, rerank=req.rerank)
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
     def _event_stream():
-        # First: emit retrieved chunks as a metadata event
-        import json
-        meta = [
-            {
-                "faiss_index": c.faiss_index,
-                "chunk_index": c.chunk_index,
-                "source_file": c.source_file,
-                "text": c.text,
-                "char_start": c.char_start,
-                "char_end": c.char_end,
-                "score": c.score,
-            }
-            for c in chunks
-        ]
+        meta = [_chunk_meta(c).model_dump() for c in chunks]
         yield f"event: context\ndata: {json.dumps(meta)}\n\n"
 
-        # Then: stream answer tokens
         try:
             for token in stream_answer(req.query, chunks, model=req.model):
                 yield f"data: {token}\n\n"
@@ -76,13 +84,15 @@ def query_stream(req: QueryRequest) -> StreamingResponse:
     return StreamingResponse(_event_stream(), media_type="text/event-stream")
 
 
-# ── non-streaming endpoint (for testing / curl) ───────────────────────────────
+# ---------------------------------------------------------------------------
+# Sync endpoint (for testing / curl)
+# ---------------------------------------------------------------------------
 
 @router.post("", response_model=QueryMetaResponse)
 def query_sync(req: QueryRequest) -> QueryMetaResponse:
-    """Retrieve chunks and return the full answer in one JSON response (no streaming)."""
+    """Retrieve chunks and return full answer in one JSON response (no streaming)."""
     try:
-        chunks: list[RetrievedChunk] = retrieve(req.query, top_k=req.top_k)
+        chunks: list[RetrievedChunk] = retrieve(req.query, top_k=req.top_k, rerank=req.rerank)
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -93,17 +103,7 @@ def query_sync(req: QueryRequest) -> QueryMetaResponse:
 
     return QueryMetaResponse(
         query=req.query,
-        chunks=[
-            ChunkMeta(
-                faiss_index=c.faiss_index,
-                chunk_index=c.chunk_index,
-                source_file=c.source_file,
-                text=c.text,
-                char_start=c.char_start,
-                char_end=c.char_end,
-                score=c.score,
-            )
-            for c in chunks
-        ],
+        reranked=req.rerank,
+        chunks=[_chunk_meta(c) for c in chunks],
         answer=answer,
     )

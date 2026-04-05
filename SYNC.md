@@ -19,19 +19,20 @@ Update this after every session.
 
 ---
 
-## In Progress
+## Phase 1 — COMPLETE ✅
 
-- [ ] Backend project structure
-- [ ] `services/chunking.py` — Recursive Character Text Splitter
-- [ ] `services/ingestion.py` — text extraction (txt first, then pdf)
-- [ ] `db/database.py` — SQLite schema + init
-- [ ] `api/v1/chunk.py` — `/api/v1/chunk` endpoint (dry-run preview)
-- [ ] `api/v1/ingest.py` — `/api/v1/ingest` endpoint
-- [ ] `services/embedding.py` — sentence-transformers + FAISS indexing
-- [ ] `api/v1/embed.py` — `/api/v1/embed` endpoint
-- [ ] `services/retrieval.py` — semantic search + Ollama streaming
-- [ ] `api/v1/query.py` — `/api/v1/query` endpoint
-- [ ] `main.py` — FastAPI app wiring everything together
+- [x] Backend project structure + uv setup (Python 3.12)
+- [x] `services/chunking.py` — Recursive Character Text Splitter
+- [x] `services/ingestion.py` — text extraction (.txt + .pdf)
+- [x] `db/database.py` — SQLite schema + init
+- [x] `api/v1/chunk.py` — `/api/v1/chunk` dry-run preview
+- [x] `api/v1/ingest.py` — `/api/v1/ingest` file upload
+- [x] `services/embedding.py` — MiniLM + FAISS IndexFlatIP (cosine)
+- [x] `api/v1/embed.py` — `/api/v1/embed` chunk + store
+- [x] `services/retrieval.py` — FAISS search + Ollama streaming
+- [x] `api/v1/query.py` — `/api/v1/query` full RAG pipeline
+- [x] `main.py` — FastAPI app, all routers wired
+- [x] Tested end-to-end with sample.txt + phi3:mini
 
 ---
 
