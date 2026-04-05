@@ -33,6 +33,7 @@ export interface IngestResponse {
   char_count: number;
   line_count: number;
   preview: string;
+  text: string;   // full extracted text (backend handles PDF via PyMuPDF)
 }
 
 export interface EmbedResponse {

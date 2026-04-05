@@ -38,7 +38,7 @@ Update this after every session.
 ---
 
 ## Known Issues / Tech Debt
-- [ ] PDF full-text extraction: frontend currently uses `file.text()` (breaks on binary PDFs). Fix: use `extractedText` from `/api/v1/ingest` response body (backend already handles PDF via PyMuPDF), then fetch full text via a new `/api/v1/ingest/text` endpoint or return full text in the ingest response.
+- [x] PDF full-text extraction: `/api/v1/ingest` now returns full `text` field. Frontend uses `result.text` directly — `file.text()` removed. Works for both .txt and binary .pdf.
 
 ## Next Up (Phase 2)
 

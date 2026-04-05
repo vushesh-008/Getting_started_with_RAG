@@ -19,7 +19,8 @@ class IngestResponse(BaseModel):
     filename: str
     char_count: int
     line_count: int
-    preview: str          # first 500 chars of extracted text
+    preview: str   # first 500 chars — for quick display
+    text: str      # full extracted text — used by frontend for chunking/embedding
 
 
 @router.post("", response_model=IngestResponse)
@@ -47,4 +48,5 @@ async def ingest_file(file: UploadFile) -> IngestResponse:
         char_count=len(text),
         line_count=text.count("\n"),
         preview=text[:500],
+        text=text,
     )

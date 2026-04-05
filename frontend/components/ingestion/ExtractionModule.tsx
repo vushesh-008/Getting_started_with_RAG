@@ -62,13 +62,8 @@ export function ExtractionModule() {
       try {
         const result = await ingestFile(file);
         setRawFile(file);
-        setExtractedText(result.preview.length < result.char_count
-          ? result.preview  // preview only — full text needed for chunking
-          : result.preview);
-
-        // Fetch full text for chunking (re-read the file client-side)
-        const fullText = await file.text();
-        setExtractedText(fullText);
+        // Use backend-extracted text — works for both .txt and binary .pdf (PyMuPDF)
+        setExtractedText(result.text);
 
         setUploadedFile({
           name: result.filename,
