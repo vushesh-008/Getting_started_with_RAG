@@ -3,6 +3,7 @@
 import { ExtractionModule } from "@/components/ingestion/ExtractionModule";
 import { InteractiveSlicer } from "@/components/ingestion/InteractiveSlicer";
 import { VectorEmbeddingModule } from "@/components/ingestion/VectorEmbeddingModule";
+import { PersistenceModule } from "@/components/ingestion/PersistenceModule";
 
 export default function Home() {
   return (
@@ -20,11 +21,12 @@ export default function Home() {
         </p>
       </div>
 
-      {/* Module grid — 3 columns */}
-      <div className="grid grid-cols-3 gap-4" style={{ height: "75vh" }}>
+      {/* 4-module grid */}
+      <div className="grid grid-cols-4 gap-4" style={{ height: "75vh" }}>
         <ExtractionModule />
         <InteractiveSlicer />
         <VectorEmbeddingModule />
+        <PersistenceModule />
       </div>
     </main>
   );
