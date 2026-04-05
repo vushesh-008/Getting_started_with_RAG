@@ -134,7 +134,9 @@ export function streamQuery(
         if (line.startsWith("event:")) {
           currentEvent = line.slice(6).trim();
         } else if (line.startsWith("data:")) {
-          const data = line.slice(5).trim();
+          // SSE spec: strip exactly one leading space after "data:" — do NOT trim further
+          // or token whitespace (spaces between words) gets silently dropped.
+          const data = line.startsWith("data: ") ? line.slice(6) : line.slice(5);
           if (currentEvent === "context") {
             onContext(JSON.parse(data));
           } else if (currentEvent === "done") {
